@@ -1,0 +1,12 @@
+{
+  "name": "local-folder-snapshots",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 5173",
+    "test": "node --test",
+    "check": "find src scripts \\( -name '*.js' -o -name '*.mjs' \\) -print0 | sort -z | xargs -0 -n 1 node --check"
+  },
+  "description": "Local folder snapshot tool using File System Access API, IndexedDB and Web Workers."
+}

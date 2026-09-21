@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>本地文件夹快照</title>
+    <link rel="stylesheet" href="src/ui/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">File System Access API · IndexedDB · Web Worker</p>
+          <h1>本地文件夹快照</h1>
+        </div>
+        <div class="topbar-actions">
+          <label class="inline-control">
+            <input id="autoScan" type="checkbox" checked>
+            定时扫描
+          </label>
+          <select id="interval" aria-label="扫描间隔">
+            <option value="300000">5 分钟</option>
+            <option value="600000" selected>10 分钟</option>
+            <option value="1800000">30 分钟</option>
+            <option value="3600000">1 小时</option>
+          </select>
+          <button id="scanNow" class="button primary" type="button">立即扫描</button>
+          <button id="cancelScan" class="button danger ghost" type="button" hidden>取消扫描</button>
+        </div>
+      </header>
+
+      <main>
+        <section id="permissionBanner" class="banner info" role="status"></section>
+
+        <div class="grid dashboard">
+          <section class="card folder-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">授权目录</p>
+                <h2 id="rootName">尚未选择目录</h2>
+              </div>
+              <span id="permissionState" class="status-pill unknown">未知</span>
+            </div>
+            <p id="rootHint" class="muted">选择一个本地目录后，句柄会保存到 IndexedDB；再次打开浏览器可恢复授权。</p>
+            <div class="button-row">
+              <button id="pickFolder" class="button primary" type="button">选择目录</button>
+              <button id="requestPermission" class="button" type="button" hidden>重新授权</button>
+              <button id="forgetRoot" class="button ghost danger" type="button" hidden>忘记目录</button>
+            </div>
+            <dl class="metrics">
+              <div><dt>快照</dt><dd id="snapshotCount">0</dd></div>
+              <div><dt>文件</dt><dd id="fileCount">—</dd></div>
+              <div><dt>总大小</dt><dd id="totalSize">—</dd></div>
+              <div><dt>本地占用</dt><dd id="storageBytes">—</dd></div>
+            </dl>
+          </section>
+
+          <section class="card scan-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">扫描状态</p>
+                <h2 id="scanState">空闲</h2>
+              </div>
+              <span id="scanClock" class="mono"></span>
+            </div>
+            <div class="progress" aria-hidden="true"><div id="progressBar"></div></div>
+            <p id="scanMessage" class="muted">扫描、哈希、分块读取和 diff 均在 Worker 中执行。</p>
+            <p id="scanWarnings" class="muted"></p>
+            <label class="inline-control full-width">
+              <input id="forceHash" type="checkbox" checked>
+              强制哈希所有文件（关闭后依据大小和修改时间跳过未变化文件）
+            </label>
+          </section>
+        </div>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">历史快照</p>
+              <h2>版本列表</h2>
+            </div>
+            <button id="refreshList" class="button ghost" type="button">刷新</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>快照</th>
+                  <th>时间</th>
+                  <th>文件</th>
+                  <th>变化</th>
+                  <th>大小</th>
+                  <th>新增块</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="snapshotsBody"><tr><td colspan="7" class="empty">暂无快照</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="grid detail-grid">
+          <section class="card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">浏览快照</p>
+                <h2>文件树</h2>
+              </div>
+            </div>
+            <nav id="breadcrumbs" class="breadcrumbs muted" aria-label="快照路径"></nav>
+            <div class="table-wrap compact">
+              <table>
+                <thead><tr><th>名称</th><th>类型</th><th>大小</th><th>修改时间</th><th></th></tr></thead>
+                <tbody id="treeBody"><tr><td colspan="5" class="empty">先选择一个快照</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">差异对比</p>
+                <h2>两个快照 Diff</h2>
+              </div>
+            </div>
+            <div class="diff-controls">
+              <select id="fromSnapshot" aria-label="基准快照"></select>
+              <span aria-hidden="true">→</span>
+              <select id="toSnapshot" aria-label="目标快照"></select>
+              <button id="runDiff" class="button primary" type="button">对比</button>
+            </div>
+            <div class="filter-row" id="diffFilters">
+              <button class="chip active" data-filter="all" type="button">全部</button>
+              <button class="chip" data-filter="added" type="button">新增</button>
+              <button class="chip" data-filter="removed" type="button">删除</button>
+              <button class="chip" data-filter="modified" type="button">修改</button>
+              <button class="chip" data-filter="typeChanged" type="button">类型变化</button>
+            </div>
+            <div id="diffSummary" class="diff-summary muted">选择两个快照后由 Worker 计算差异。</div>
+            <div class="table-wrap compact diff-table">
+              <table>
+                <thead><tr><th>状态</th><th>路径</th><th>大小变化</th><th>块变化</th></tr></thead>
+                <tbody id="diffBody"></tbody>
+              </table>
+            </div>
+            <div class="pager">
+              <button id="diffPrev" class="button ghost" type="button">上一页</button>
+              <span id="diffPage" class="mono">0 / 0</span>
+              <button id="diffNext" class="button ghost" type="button">下一页</button>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <dialog id="rollbackDialog">
+      <form method="dialog" class="dialog-card">
+        <p class="eyebrow">回滚</p>
+        <h2>恢复到指定快照</h2>
+        <p id="rollbackTarget" class="mono"></p>
+        <div id="rollbackPreview" class="rollback-preview"></div>
+        <label class="inline-control">
+          <input id="rollbackVerify" type="checkbox" checked>
+          回滚前用完整哈希校验当前文件
+        </label>
+        <p class="warning-text">操作会改写工作目录：新增目标之后的文件会被删除，缺失文件会按内容块恢复。符号链接不会被修改或跟随。浏览器 API 不能恢复原始修改时间。</p>
+        <menu>
+          <button value="cancel" class="button ghost" type="submit">取消</button>
+          <button id="executeRollback" class="button danger" type="button">确认回滚</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <div id="toast" role="alert" aria-live="polite"></div>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
