@@ -1,0 +1,19 @@
+{
+  "name": "local-folder-snapshots",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地文件夹增量快照工具：File System Access API + IndexedDB + Web Worker",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js 8731",
+    "test": "node tests/lib.test.mjs && node tests/rollback.sim.test.mjs 0.02",
+    "test:logic": "node tests/lib.test.mjs",
+    "test:rollback": "node tests/rollback.sim.test.mjs 0.02",
+    "fixture": "node scripts/make-fixture.js",
+    "fixture:modify": "node scripts/modify-files.js",
+    "fixture:verify": "node scripts/verify-rollback.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

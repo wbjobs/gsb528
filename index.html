@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>本地文件夹快照工具</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>📦 本地文件夹快照</h1>
+    <div class="topbar-actions">
+      <span id="storage-info" class="muted"></span>
+      <button id="btn-pick" class="btn primary">选择目录</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <main class="layout">
+    <section class="card" id="folder-card" hidden>
+      <div class="card-head">
+        <div>
+          <h2>授权目录：<span id="folder-name">-</span></h2>
+          <p class="muted" id="folder-status"></p>
+        </div>
+        <div class="btn-row">
+          <button id="btn-reauth" class="btn">重新授权</button>
+          <button id="btn-forget" class="btn ghost">忘记目录</button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="control">
+          <label for="scan-label">快照标签（可选）</label>
+          <input id="scan-label" type="text" placeholder="例如：发布前基线" />
+        </div>
+        <div class="btn-row">
+          <button id="btn-scan" class="btn primary" disabled>立即扫描</button>
+          <button id="btn-abort" class="btn ghost">中止</button>
+          <button id="btn-diff" class="btn" disabled>对比选中的两个快照</button>
+          <button id="btn-gc" class="btn ghost">清理无引用块</button>
+          <button id="btn-refresh" class="btn ghost">刷新列表</button>
+        </div>
+      </div>
+
+      <div id="progress-row" class="progress-row hidden">
+        <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+        <span id="progress-label" class="muted"></span>
+      </div>
+
+      <details class="settings">
+        <summary>扫描设置（分块大小 / 定时 / 忽略规则 / 符号链接说明）</summary>
+        <div class="settings-grid">
+          <label>定时自动扫描
+            <input id="cfg-auto" type="checkbox" />
+          </label>
+          <label>扫描间隔（分钟）
+            <input id="cfg-interval" type="number" min="1" step="1" />
+          </label>
+          <label>分块大小（MB，大文件按此分块哈希与去重）
+            <input id="cfg-chunk" type="number" min="1" step="1" />
+          </label>
+          <label>文件读取并发数（1–8）
+            <input id="cfg-concurrency" type="number" min="1" max="8" step="1" />
+          </label>
+          <label class="wide">忽略规则（每行一条，.gitignore 风格，如 <code>node_modules/</code>、<code>*.tmp</code>、<code>/build</code>）
+            <textarea id="cfg-ignore" rows="4" placeholder="# 符号链接无法被浏览器 API 直接识别，可在此按名称跳过链接"></textarea>
+          </label>
+          <p class="wide muted small">
+            符号链接：File System Access API 不暴露条目是否为 symlink，浏览器会跟随链接。
+            工具内置祖先环路检测防止无限递归，并可通过上方规则按名称跳过；指向树外的链接仍可能被跟随，这是 Web 平台限制。
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>快照历史</h2>
+        <p class="muted small">单选列分别指定 diff 基准与目标。删除某个快照会级联删除其后的快照（时间链存储）。</p>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>基准</th><th>目标</th><th>时间 / 标签</th><th>文件/目录</th>
+              <th>总大小</th><th>增量</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="snapshot-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card hidden" id="panel-detail">
+      <div class="card-head">
+        <div>
+          <h2 id="detail-title">快照详情</h2>
+          <p class="muted" id="detail-meta"></p>
+          <p id="detail-skipped" class="warn-text small hidden"></p>
+        </div>
+        <input id="file-search" type="search" placeholder="按路径过滤文件…" />
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th></th><th>路径</th><th>大小</th><th>分块</th><th></th></tr></thead>
+          <tbody id="file-tbody"></tbody>
+        </table>
+      </div>
+      <div id="file-pager" class="pager"></div>
+    </section>
+
+    <section class="card">
+      <h2>活动日志</h2>
+      <div id="log" class="log"></div>
+    </section>
+  </main>
+
+  <div id="modal-diff" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>快照差异</h3>
+        <button class="btn ghost" data-close="#modal-diff">关闭</button>
+      </div>
+      <p id="diff-summary" class="muted"></p>
+      <div class="diff-columns">
+        <div id="diff-added" class="diff-group"><h4 class="diff-title">新增文件 <span class="diff-count"></span></h4><div class="diff-list"></div></div>
+        <div id="diff-removed" class="diff-group"><h4 class="diff-title">删除文件 <span class="diff-count"></span></h4><div class="diff-list"></div></div>
+        <div id="diff-changed" class="diff-group"><h4 class="diff-title">修改文件（含块级差异） <span class="diff-count"></span></h4><div class="diff-list"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-rollback" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="rollback-title">回滚确认</h3>
+        <button class="btn ghost" data-close="#modal-rollback">取消</button>
+      </div>
+      <p id="rollback-detail" class="muted"></p>
+      <div id="rollback-plan"></div>
+      <div class="btn-row end">
+        <button id="btn-rollback-apply" class="btn danger" disabled>确认回滚</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
